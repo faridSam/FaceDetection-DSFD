@@ -1,11 +1,12 @@
 from __future__ import print_function 
 import sys
 import os
+import subprocess
 import argparse
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
-import torchvision.transforms as transforms
+# import torchvision.transforms as transforms
 from torch.autograd import Variable
 from data import WIDERFace_ROOT , WIDERFace_CLASSES as labelmap
 from PIL import Image
@@ -29,9 +30,9 @@ parser.add_argument('--save_folder', default='eval_tools/', type=str,
                     help='Dir to save results')
 parser.add_argument('--visual_threshold', default=0.1, type=float,
                     help='Final confidence threshold')
-parser.add_argument('--cuda', default=True, type=bool,
+parser.add_argument('--cuda', default=False, type=bool,
                     help='Use cuda to train model')
-parser.add_argument('--img_root', default='./data/worlds-largest-selfie.jpg', help='Location of test images directory')
+parser.add_argument('--img_root', default='./data/murray.jpg', help='Location of test images directory')
 parser.add_argument('--widerface_root', default=WIDERFace_ROOT, help='Location of WIDERFACE root directory')
 args = parser.parse_args()
 
@@ -91,10 +92,16 @@ def infer(net , img , transform , thresh , cuda , shrink):
     if shrink != 1:
         img = cv2.resize(img, None, None, fx=shrink, fy=shrink, interpolation=cv2.INTER_LINEAR)
     x = torch.from_numpy(transform(img)[0]).permute(2, 0, 1)
-    x = Variable(x.unsqueeze(0) , volatile=True)
+    # x = Variable(x.unsqueeze(0) , volatile=True)
+    x = Variable(x.unsqueeze(0) , requires_grad=True)
     if cuda:
-        x = x.cuda()
+        pass
+        # x = x.cuda()
     #print (shrink , x.shape)
+    cmd_gpu = 'nvidia-smi'
+    print('nvidia before net():')
+    subprocess.run(cmd_gpu, shell=True, check=True)
+    print(x.dtype)
     y = net(x)      # forward pass
     detections = y.data
     # scale each detection back up to the image
@@ -105,7 +112,7 @@ def infer(net , img , transform , thresh , cuda , shrink):
         j = 0
         while detections[0, i, j, 0] >= thresh:
             score = detections[0, i, j, 0]
-            #label_name = labelmap[i-1]
+            label_name = labelmap[i-1]
             pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
             coords = (pt[0], pt[1], pt[2], pt[3]) 
             det.append([pt[0], pt[1], pt[2], pt[3], score])
@@ -191,13 +198,19 @@ def vis_detections(im,  dets, image_name , thresh=0.5):
 
 def test_oneimage():
     # load net
+    torch.set_grad_enabled(False)
     cfg = widerface_640
     num_classes = len(WIDERFace_CLASSES) + 1 # +1 background
     net = build_ssd('test', cfg['min_dim'], num_classes) # initialize SSD
-    net.load_state_dict(torch.load(args.trained_model))
-    net.cuda()
+    # net.load_state_dict(torch.load(args.trained_model))
+    # net.cuda()
     net.eval()
+    for p in net.parameters():
+        print(p.dtype)
     print('Finished loading model!')
+    cmd_gpu = 'nvidia-smi'
+    print('nvidia after loading model:')
+    subprocess.run(cmd_gpu, shell=True, check=True)
 
     # evaluation
     cuda = args.cuda
@@ -214,6 +227,8 @@ def test_oneimage():
     max_im_shrink = ( (2000.0*2000.0) / (img.shape[0] * img.shape[1])) ** 0.5
     shrink = max_im_shrink if max_im_shrink < 1 else 1
 
+    print('nvidia before infer:')
+    subprocess.run(cmd_gpu, shell=True, check=True)
     det0 = infer(net , img , transform , thresh , cuda , shrink)
     det1 = infer_flip(net , img , transform , thresh , cuda , shrink)
     # shrink detecting and shrink only detect big face

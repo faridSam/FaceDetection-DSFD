@@ -19,7 +19,7 @@ plt.switch_backend('agg')
 
 WIDERFace_CLASSES = ['face']  # always index 0
 # note: if you used our download scripts, this should be right
-WIDERFace_ROOT = "/data2/lijian/widerface/data/"
+WIDERFace_ROOT = "/data/widerface/data/"
 
 
 class WIDERFaceAnnotationTransform(object):
